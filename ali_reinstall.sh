@@ -3,8 +3,9 @@
 # shellcheck disable=SC2086
 
 set -eE
-confhome=https://raw.githubusercontent.com/zhoushun98/reinstall/main
-confhome_cn=https://ghfast.top/https://raw.githubusercontent.com/zhoushun98/reinstall/main
+confhome=https://raw.githubusercontent.com/bin456789/reinstall/main
+confhome_cn=https://cnb.cool/bin456789/reinstall/-/git/raw/main
+# confhome_cn=https://www.ghproxy.cc/https://raw.githubusercontent.com/bin456789/reinstall/main
 
 # 默认密码
 DEFAULT_PASSWORD=123@@@
@@ -47,15 +48,15 @@ usage_and_exit() {
 Usage: $reinstall_____ anolis      7|8|23
                        opencloudos 8|9|23
                        rocky       8|9|10
-                       oracle      8|9
+                       oracle      8|9|10
                        almalinux   8|9|10
                        centos      9|10
                        fedora      41|42
                        nixos       25.05
-                       debian      9|10|11|12
+                       debian      9|10|11|12|13
                        opensuse    15.6|tumbleweed
                        alpine      3.19|3.20|3.21|3.22
-                       openeuler   20.03|22.03|24.03|25.03
+                       openeuler   20.03|22.03|24.03|25.09
                        ubuntu      16.04|18.04|20.04|22.04|24.04|25.04 [--minimal]
                        kali
                        arch
@@ -864,6 +865,7 @@ get_windows_iso_link() {
                 serverdatacenter | serverdatacentercore) echo _ ;;
                 esac
                 ;;
+            # massgrave 不提供 2012 下载
             '2012 r2' | \
                 2016 | 2019 | 2022 | 2025)
                 case "$edition" in
@@ -888,13 +890,25 @@ get_windows_iso_link() {
                 case "$edition" in
                 starter)
                     case "$arch_win" in
-                    x86) echo ultimate ;;
+                    x86) echo starter ;;
                     esac
                     ;;
-                homebasic | homepremium | professional | ultimate) echo ultimate ;;
+                homebasic)
+                    case "$arch_win" in
+                    x86) echo "home basic" ;;
+                    esac
+                    ;;
+                homepremium) echo "home premium" ;;
+                professional | enterprise | ultimate) echo "$edition" ;;
                 esac
                 ;;
-            # 8.1 需到 msdl.gravesoft.dev 下载
+            # massgrave 不提供 windows 8 下载
+            8.1)
+                case "$edition" in
+                '') echo _ ;; # windows 8.1 core
+                pro | enterprise) echo "$edition" ;;
+                esac
+                ;;
             10)
                 case "$edition" in
                 home | 'home single language') echo consumer ;;
@@ -946,6 +960,8 @@ get_windows_iso_link() {
         esac
     }
 
+    # 8.1 和 11 arm 没有每月发布 iso
+    # 因此优先从 msdl 下载
     get_label_msdl() {
         case "$version" in
         8.1)
@@ -991,7 +1007,13 @@ get_windows_iso_link() {
     label_vlsc=$(get_label_vlsc)
     page=$(get_page)
 
-    page_url=https://massgrave.dev/windows_${page}_links
+    if [ "$page" = vista ]; then
+        page_url=https://massgrave.dev/windows_vista__links
+    elif [ "$page" = server ]; then
+        page_url=https://massgrave.dev/windows-server-links
+    else
+        page_url=https://massgrave.dev/windows_${page}_links
+    fi
 
     info "Find windows iso"
     echo "Version:    $version"
@@ -1093,7 +1115,7 @@ setos() {
 
         # 不要用https 因为甲骨文云arm initramfs阶段不会从硬件同步时钟，导致访问https出错
         if is_in_china; then
-            mirror=http://mirror.nju.edu.cn/alpine/v$releasever
+            mirror=http://mirrors.cloud.aliyuncs.com/alpine/v$releasever
         else
             mirror=http://dl-cdn.alpinelinux.org/alpine/v$releasever
         fi
@@ -1117,6 +1139,9 @@ setos() {
         10) codename=buster ;;
         11) codename=bullseye ;;
         12) codename=bookworm ;;
+        13) codename=trixie ;;
+        14) codename=forky ;;
+        15) codename=duke ;;
         esac
 
         if ! is_use_cloud_image && is_debian_elts && is_in_china; then
@@ -1154,7 +1179,7 @@ Continue?
                 # https://www.itdog.cn/ping/ftp.cn.debian.org
                 mirror=mirrors.cloud.aliyuncs.com/debian
             else
-                mirror=mirrors.cloud.aliyuncs.com/debian # fastly
+                mirror=deb.debian.org/debian # fastly
             fi
             udeb_mirror=$mirror
             deb_mirror=$mirror
@@ -1209,7 +1234,7 @@ Continue?
         else
             # 传统安装
             if is_in_china; then
-                hostname=mirror.nju.edu.cn
+                hostname=mirrors.cloud.aliyuncs.com
             else
                 # http.kali.org 没有 ipv6 地址
                 # http.kali.org (geoip 重定向) 到 kali.download (cf)
@@ -1237,7 +1262,7 @@ Continue?
         20.04) codename=focal ;;
         22.04) codename=jammy ;;
         24.04) codename=noble ;;
-        25.04) codename=plucky ;; # non-lts
+        25.10) codename=questing ;; # non-lts
         esac
 
         if is_use_cloud_image; then
@@ -1246,10 +1271,10 @@ Continue?
                 # 有的源没有 releases 镜像
                 # https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cloud-images/releases/
                 #   https://unicom.mirrors.ustc.edu.cn/ubuntu-cloud-images/releases/
-                #            https://mirror.nju.edu.cn/ubuntu-cloud-images/releases/
+                #            https://mirrors.cloud.aliyuncs.com/ubuntu-cloud-images/releases/
 
                 # mirrors.cloud.tencent.com
-                ci_mirror=https://mirror.nju.edu.cn/ubuntu-cloud-images
+                ci_mirror=https://mirrors.cloud.aliyuncs.com/ubuntu-cloud-images
             else
                 ci_mirror=https://cloud-images.ubuntu.com
             fi
@@ -1284,8 +1309,8 @@ Continue?
             # 传统安装
             if is_in_china; then
                 case "$basearch" in
-                "x86_64") mirror=https://mirror.nju.edu.cn/ubuntu-releases/$releasever ;;
-                "aarch64") mirror=https://mirror.nju.edu.cn/ubuntu-cdimage/releases/$releasever/release ;;
+                "x86_64") mirror=https://mirrors.cloud.aliyuncs.com/ubuntu-releases/$releasever ;;
+                "aarch64") mirror=https://mirrors.cloud.aliyuncs.com/ubuntu-cdimage/releases/$releasever/release ;;
                 esac
             else
                 case "$basearch" in
@@ -1311,13 +1336,13 @@ Continue?
     setos_arch() {
         if [ "$basearch" = "x86_64" ]; then
             if is_in_china; then
-                mirror=https://mirror.nju.edu.cn/archlinux
+                mirror=https://mirrors.cloud.aliyuncs.com/archlinux
             else
                 mirror=https://geo.mirror.pkgbuild.com # geoip
             fi
         else
             if is_in_china; then
-                mirror=https://mirror.nju.edu.cn/archlinuxarm
+                mirror=https://mirrors.cloud.aliyuncs.com/archlinuxarm
             else
                 # https 证书有问题
                 mirror=http://mirror.archlinuxarm.org # geoip
@@ -1340,7 +1365,7 @@ Continue?
 
     setos_nixos() {
         if is_in_china; then
-            mirror=https://mirror.nju.edu.cn/nix-channels
+            mirror=https://mirrors.cloud.aliyuncs.com/nix-channels
         else
             mirror=https://nixos.org/channels
         fi
@@ -1358,7 +1383,7 @@ Continue?
 
     setos_gentoo() {
         if is_in_china; then
-            mirror=https://mirror.nju.edu.cn/gentoo
+            mirror=https://mirrors.cloud.aliyuncs.com/gentoo
         else
             mirror=https://distfiles.gentoo.org # cdn77
         fi
@@ -1395,7 +1420,7 @@ Continue?
         # https://mirrors.tuna.tsinghua.edu.cn/opensuse/ports/aarch64/tumbleweed/appliances/
 
         if is_in_china; then
-            mirror=https://mirror.nju.edu.cn/opensuse
+            mirror=https://mirrors.cloud.aliyuncs.com/opensuse
         else
             mirror=https://downloadcontentcdn.opensuse.org
         fi
@@ -1564,14 +1589,24 @@ Continue with DD?
             fi
         done
 
-        iso=$(curl -L https://fnnas.com/ | grep -o 'https://[^"]*\.iso' | head -1)
+        iso=$(curl -L https://fnnas.com/ | grep -o 'https://[^"]*\.iso' | head -1 | grep .)
+
+        # curl 7.82.0+
+        # curl -L --json '{"url":"'$iso'"}' https://www.fnnas.com/api/download-sign
+
+        iso=$(curl -L \
+            -d '{"url":"'$iso'"}' \
+            -H 'Content-Type: application/json' \
+            https://www.fnnas.com/api/download-sign |
+            grep -o 'https://[^"]*')
+
         test_url "$iso" iso
         eval "${step}_iso='$iso'"
     }
 
     setos_aosc() {
         if is_in_china; then
-            mirror=https://mirror.nju.edu.cn/anthon/aosc-os
+            mirror=https://mirrors.cloud.aliyuncs.com/anthon/aosc-os
         else
             # 服务器在香港
             mirror=https://releases.aosc.io
@@ -1594,7 +1629,9 @@ Continue with DD?
         fi
 
         elarch=$basearch
-        if [ "$distro" = almalinux ] && [ "$basearch" = x86_64 ] && ! is_cpu_supports_x86_64_v3; then
+        if [ "$basearch" = x86_64 ] &&
+            [ "$distro" = almalinux ] && [ "$releasever" -ge 10 ] &&
+            ! is_cpu_supports_x86_64_v3; then
             elarch=x86_64_v2
         fi
 
@@ -1602,10 +1639,10 @@ Continue with DD?
             # ci
             if is_in_china; then
                 case $distro in
-                centos) ci_mirror="https://mirror.nju.edu.cn/centos-cloud/centos" ;;
-                almalinux) ci_mirror="https://mirror.nju.edu.cn/almalinux/$releasever/cloud/$elarch/images" ;;
-                rocky) ci_mirror="https://mirror.nju.edu.cn/rocky/$releasever/images/$elarch" ;;
-                fedora) ci_mirror="https://mirror.nju.edu.cn/fedora/releases/$releasever/Cloud/$elarch/images" ;;
+                centos) ci_mirror="https://mirrors.cloud.aliyuncs.com/centos-cloud/centos" ;;
+                almalinux) ci_mirror="https://mirrors.cloud.aliyuncs.com/almalinux/$releasever/cloud/$elarch/images" ;;
+                rocky) ci_mirror="https://mirrors.cloud.aliyuncs.com/rocky/$releasever/images/$elarch" ;;
+                fedora) ci_mirror="https://mirrors.cloud.aliyuncs.com/fedora/releases/$releasever/Cloud/$elarch/images" ;;
                 esac
             else
                 case $distro in
@@ -1727,7 +1764,12 @@ Continue with DD?
 
         if is_use_cloud_image; then
             # ci
-            dir=$releasever/images/$basearch
+            if [ "$releasever" -eq 9 ]; then
+                dir=$releasever/images/qcow2/$basearch
+            else
+                dir=$releasever/images/$basearch
+            fi
+
             file=$(curl -L $mirror/$dir/ | grep -oP 'OpenCloudOS.*?\.qcow2' |
                 sort -uV | tail -1 | grep .)
             eval ${step}_img=$mirror/$dir/$file
@@ -1824,14 +1866,14 @@ verify_os_name() {
         'opencloudos 8|9|23' \
         'almalinux   8|9|10' \
         'rocky       8|9|10' \
-        'oracle      8|9' \
+        'oracle      8|9|10' \
         'fedora      41|42' \
         'nixos       25.05' \
-        'debian      9|10|11|12' \
+        'debian      9|10|11|12|13' \
         'opensuse    15.6|16.0|tumbleweed' \
         'alpine      3.19|3.20|3.21|3.22' \
-        'openeuler   20.03|22.03|24.03|25.03' \
-        'ubuntu      16.04|18.04|20.04|22.04|24.04|25.04' \
+        'openeuler   20.03|22.03|24.03|25.09' \
+        'ubuntu      16.04|18.04|20.04|22.04|24.04|25.10' \
         'redhat' \
         'kali' \
         'arch' \
@@ -2093,6 +2135,10 @@ install_pkg() {
     done >&2
 }
 
+is_valid_ram_size() {
+    is_digit "$1" && [ "$1" -gt 0 ]
+}
+
 check_ram() {
     ram_standard=$(
         case "$distro" in
@@ -2120,7 +2166,7 @@ check_ram() {
     )
 
     if is_in_windows; then
-        ram_size=$(wmic memorychip get capacity | awk -F= '{sum+=$2} END {print sum/1024/1024}')
+        ram_size=$(wmic memorychip get capacity | awk -F= '{sum+=$2} END {if(sum>0) print sum/1024/1024}')
     else
         # lsmem最准确但 centos7 arm 和 alpine 不能用，debian 9 util-linux 没有 lsmem
         # arm 24g dmidecode 显示少了128m
@@ -2129,12 +2175,12 @@ check_ram() {
         install_pkg lsmem
         ram_size=$(lsmem -b 2>/dev/null | grep 'Total online memory:' | awk '{ print $NF/1024/1024 }')
 
-        if [ -z $ram_size ]; then
+        if ! is_valid_ram_size "$ram_size"; then
             install_pkg dmidecode
-            ram_size=$(dmidecode -t 17 | grep "Size.*[GM]B" | awk '{if ($3=="GB") s+=$2*1024; else s+=$2} END {print s}')
+            ram_size=$(dmidecode -t 17 | grep "Size.*[GM]B" | awk '{if ($3=="GB") s+=$2*1024; else s+=$2} END {if(s>0) print s}')
         fi
 
-        if [ -z $ram_size ]; then
+        if ! is_valid_ram_size "$ram_size"; then
             install_pkg lshw
             # 不能忽略 -i，alpine 显示的是 System memory
             ram_str=$(lshw -c memory -short | grep -i 'System Memory' | awk '{print $3}')
@@ -2145,12 +2191,12 @@ check_ram() {
 
     # 用于兜底，不太准确
     # cygwin 要装 procps-ng 才有 free 命令
-    if [ -z $ram_size ]; then
+    if ! is_valid_ram_size "$ram_size"; then
         ram_size_k=$(grep '^MemTotal:' /proc/meminfo | awk '{print $2}')
         ram_size=$((ram_size_k / 1024 + 64 + 4))
     fi
 
-    if [ -z $ram_size ] || [ $ram_size -le 0 ]; then
+    if ! is_valid_ram_size "$ram_size"; then
         error_and_exit "Could not detect RAM size."
     fi
 
@@ -2737,7 +2783,7 @@ install_grub_linux_efi() {
         fedora_ver=$(get_latest_distro_releasever fedora)
 
         if is_in_china; then
-            mirror=https://mirror.nju.edu.cn/fedora
+            mirror=https://mirrors.cloud.aliyuncs.com/fedora
         else
             mirror=https://d2lzkl7pfhq30w.cloudfront.net/pub/fedora/linux
         fi
@@ -2745,7 +2791,7 @@ install_grub_linux_efi() {
         curl -Lo $tmp/$grub_efi $mirror/releases/$fedora_ver/Everything/$basearch/os/EFI/BOOT/$grub_efi
     else
         if is_in_china; then
-            mirror=https://mirror.nju.edu.cn/opensuse
+            mirror=https://mirrors.cloud.aliyuncs.com/opensuse
         else
             mirror=https://downloadcontentcdn.opensuse.org
         fi
@@ -2764,7 +2810,7 @@ download_and_extract_apk() {
     local extract_dir=$3
 
     install_pkg tar xz
-    is_in_china && mirror=http://mirror.nju.edu.cn/alpine || mirror=https://dl-cdn.alpinelinux.org/alpine
+    is_in_china && mirror=http://mirrors.cloud.aliyuncs.com/alpine || mirror=https://dl-cdn.alpinelinux.org/alpine
     package_apk=$(curl -L $mirror/v$alpine_ver/main/$basearch/ | grep -oP "$package-[^-]*-[^-]*\.apk" | sort -u)
     if ! [ "$(wc -l <<<"$package_apk")" -eq 1 ]; then
         error_and_exit "find no/multi apks."
@@ -2782,7 +2828,7 @@ install_grub_win() {
     grub_ver=2.06
     # ftpmirror.gnu.org 是 geoip 重定向，不是 cdn
     # 有可能重定义到一个拉黑了部分 IP 的服务器
-    is_in_china && grub_url=https://mirror.nju.edu.cn/gnu/grub/grub-$grub_ver-for-windows.zip ||
+    is_in_china && grub_url=https://mirrors.cloud.aliyuncs.com/gnu/grub/grub-$grub_ver-for-windows.zip ||
         grub_url=https://mirrors.kernel.org/gnu/grub/grub-$grub_ver-for-windows.zip
     curl -Lo $tmp/grub.zip $grub_url
     # unzip -qo $tmp/grub.zip
@@ -2835,7 +2881,7 @@ install_grub_win() {
         if false; then
             # g2ldr.mbr
             # 部分国内机无法访问 ftp.cn.debian.org
-            is_in_china && host=mirror.nju.edu.cn || host=deb.debian.org
+            is_in_china && host=mirrors.cloud.aliyuncs.com || host=deb.debian.org
             curl -LO http://$host/debian/tools/win32-loader/stable/win32-loader.exe
             7z x win32-loader.exe 'g2ldr.mbr' -o$tmp/win32-loader -r -y -bso0
             find $tmp/win32-loader -name 'g2ldr.mbr' -exec cp {} /cygdrive/$c/ \;
@@ -2919,7 +2965,7 @@ build_extra_cmdline() {
     # 会将 extra.xxx=yyy 写入新系统的 /etc/modprobe.d/local.conf
     # https://answers.launchpad.net/ubuntu/+question/249456
     # https://salsa.debian.org/installer-team/rootskel/-/blob/master/src/lib/debian-installer-startup.d/S02module-params?ref_type=heads
-    for key in confhome hold force force_cn force_old_windows_setup cloud_image main_disk \
+    for key in confhome hold force_boot_mode force_cn force_old_windows_setup cloud_image main_disk \
         elts deb_mirror \
         ssh_port rdp_port web_port allow_ping; do
         value=${!key}
@@ -3111,6 +3157,7 @@ partman-xfs
 rescue-check
 wpasupplicant-udeb
 lilo-installer
+systemd-boot-installer
 nic-modules-$kver-di
 nic-pcmcia-modules-$kver-di
 nic-usb-modules-$kver-di
@@ -3161,7 +3208,7 @@ EOF
         fi
 
         # 下载 udeb
-        curl -Lo $tmp/tmp.udeb http://$nextos_udeb_mirror/"$(grep /$package $udeb_list)"
+        curl -Lo $tmp/tmp.udeb http://$nextos_udeb_mirror/"$(grep -F /${package}_ $udeb_list)"
 
         if false; then
             # 使用 dpkg
@@ -3736,7 +3783,7 @@ for o in ci installer debug minimal allow-ping force-cn help \
     allow-ping: \
     commit: \
     frpc-conf: frpc-config: frpc-toml: \
-    force: \
+    force-boot-mode: \
     force-old-windows-setup:; do
     [ -n "$long_opts" ] && long_opts+=,
     long_opts+=$o
@@ -3811,11 +3858,11 @@ while true; do
 
         shift 2
         ;;
-    --force)
+    --force-boot-mode)
         if ! { [ "$2" = bios ] || [ "$2" = efi ]; }; then
             error_and_exit "Invalid $1 value: $2"
         fi
-        force=$2
+        force_boot_mode=$2
         shift 2
         ;;
     --passwd | --password)
