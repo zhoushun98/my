@@ -24,7 +24,8 @@ EOF
 
 chattr +i /etc/apt/sources.list
 
-apt update && apt install -y sudo wget curl xz-utils \
+apt update && apt install -y --no-install-recommends \
+    sudo wget curl xz-utils \
     socat tzdata locales lsof ca-certificates \
     unzip zip tar vim jq bash-completion tree \
     cron net-tools htop iftop git rsync dnsutils binutils
