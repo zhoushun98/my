@@ -124,6 +124,7 @@ install_basic_packages() {
         net-tools \
         bind9-dnsutils \
         lsof \
+        zip \
         unzip \
         tar \
         rsync \
