@@ -126,6 +126,7 @@ install_basic_packages() {
         lsof \
         zip \
         unzip \
+        xz-utils \
         tar \
         rsync \
         screen \
