@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #############################################
-# Debian 12 系统初始化脚本
+# Debian 11 系统初始化脚本
 # 用途: 系统初始配置、软件安装、性能优化
 # 作者: Claude
 # 日期: 2026-01-09
@@ -91,10 +91,9 @@ update_sources() {
 
     # 写入新源
     cat > /etc/apt/sources.list <<EOF
-deb ${main_url}/ bookworm main contrib non-free non-free-firmware
-deb ${main_url}/ bookworm-updates main contrib non-free non-free-firmware
-deb ${main_url}/ bookworm-backports main contrib non-free non-free-firmware
-deb ${security_url} bookworm-security main contrib non-free non-free-firmware
+deb ${main_url}/ bullseye main contrib non-free
+deb ${main_url}/ bullseye-updates main contrib non-free
+deb ${security_url} bullseye-security main contrib non-free
 EOF
 
     log_info "软件源已更新为: $source_name"
@@ -260,7 +259,7 @@ alias mv='mv -i'
 export PS1='\n\[\e[1;33m\]\u@\H\[\e[1;35m\]<\D{%F %T}> \[\e[1;32m\]\w\[\e[0m\]\n\$ '
 EOF
 
-    sed -i 's|set mouse=.*|set mouse=""|g' /usr/share/vim/vim90/defaults.vim
+    sed -i 's|set mouse=.*|set mouse=""|g' /usr/share/vim/vim82/defaults.vim
 
     > /etc/motd
     rm -rf /etc/update-motd.d/*
@@ -298,7 +297,7 @@ show_system_info() {
 
 # 主函数
 main() {
-    log_info "开始执行 Debian 12 初始化脚本..."
+    log_info "开始执行 Debian 11 初始化脚本..."
 
     check_root
     backup_configs
