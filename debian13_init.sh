@@ -57,8 +57,9 @@ update_sources() {
     echo "1) 默认"
     echo "2) 腾讯云"
     echo "3) 阿里云"
+    echo "4) 南方科大"
     echo "------------------------------------------------"
-    read -p "请输入选项 [1-3] (默认为 1): " choice
+    read -p "请输入选项 [1-4] (默认为 1): " choice
 
     # 定义变量，初始化为默认官方源
     local main_url="http://deb.debian.org/debian"
@@ -75,6 +76,11 @@ update_sources() {
             main_url="http://mirrors.cloud.aliyuncs.com/debian"
             security_url="http://mirrors.cloud.aliyuncs.com/debian-security"
             source_name="阿里云"
+            ;;
+        4)
+            main_url="http://mirrors.sustech.edu.cn/debian"
+            security_url="http://mirrors.sustech.edu.cn/debian-security"
+            source_name="南方科大"
             ;;
         *)
             # 默认情况，不做修改，保持上面的初始化值
