@@ -56,11 +56,19 @@ update_sources() {
     echo "请选择要使用的 Debian 软件源镜像:"
     echo "1) 默认"
     echo "2) 南方科大"
-    echo "3) 阿里云"
-    echo "4) 腾讯云"
-    echo "5) 火山云"
+    echo "3) 阿里云(内网)"
+    echo "4) 腾讯云(内网)"
+    echo "5) 火山云(内网)"
+    echo "6) xTom(香港)"
+    echo "7) xTom(美国)"
+    echo "8) xTom(荷兰)"
+    echo "9) xTom(德国)"
+    echo "10) xTom(爱沙尼亚)"
+    echo "11) xTom(日本)"
+    echo "12) xTom(澳洲)"
+    echo "13) xTom(新加坡)"
     echo "------------------------------------------------"
-    read -p "请输入选项 [1-5] (默认为 1): " choice
+    read -p "请输入选项 [1-13] (默认为 1): " choice
 
     # 定义变量，初始化为默认官方源
     local main_url="http://deb.debian.org/debian"
@@ -76,17 +84,57 @@ update_sources() {
         3)
             main_url="http://mirrors.cloud.aliyuncs.com/debian"
             security_url="http://mirrors.cloud.aliyuncs.com/debian-security"
-            source_name="阿里云"
+            source_name="阿里云(内网)"
             ;;
         4)
             main_url="http://mirrors.tencentyun.com/debian"
             security_url="http://mirrors.tencentyun.com/debian-security"
-            source_name="腾讯云"
+            source_name="腾讯云(内网)"
             ;;
         5)
             main_url="http://mirrors.ivolces.com/debian"
             security_url="http://mirrors.ivolces.com/debian-security"
-            source_name="火山云"
+            source_name="火山云(内网)"
+            ;;
+        6)
+            main_url="http://mirrors.xtom.hk/debian"
+            security_url="http://mirrors.xtom.hk/debian-security"
+            source_name="xTom(香港)"
+            ;;
+        7)
+            main_url="http://mirrors.xtom.us/debian"
+            security_url="http://mirrors.xtom.us/debian-security"
+            source_name="xTom(美国)"
+            ;;
+        8)
+            main_url="http://mirrors.xtom.nl/debian"
+            security_url="http://mirrors.xtom.nl/debian-security"
+            source_name="xTom(荷兰)"
+            ;;
+        9)
+            main_url="http://mirrors.xtom.de/debian"
+            security_url="http://mirrors.xtom.de/debian-security"
+            source_name="xTom(德国)"
+            ;;
+        10)
+            main_url="http://mirrors.xtom.ee/debian"
+            security_url="http://mirrors.xtom.ee/debian-security"
+            source_name="xTom(爱沙尼亚)"
+            ;;
+        11)
+            main_url="http://mirrors.xtom.jp/debian"
+            security_url="http://mirrors.xtom.jp/debian-security"
+            source_name="xTom(日本)"
+            ;;
+        12)
+            main_url="http://mirrors.xtom.au/debian"
+            security_url="http://mirrors.xtom.au/debian-security"
+            source_name="xTom(澳洲)"
+            ;;
+        13)
+            main_url="http://mirrors.xtom.sg/debian"
+            security_url="http://mirrors.xtom.sg/debian-security"
+            source_name="xTom(新加坡)"
             ;;
         *)
             # 默认情况，不做修改，保持上面的初始化值
