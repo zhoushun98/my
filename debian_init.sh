@@ -147,7 +147,12 @@ install_basic_packages() {
     apt install -y \
         sudo vim curl wget git htop net-tools bind9-dnsutils lsof \
         zip unzip xz-utils tar rsync screen ca-certificates jq tree \
-        cron bash-completion lsb-release
+        cron bash-completion lsb-release \
+        traceroute mtr-tiny tcpdump netcat-openbsd \
+        iotop sysstat strace procps \
+        parted dosfstools \
+        gnupg apt-transport-https software-properties-common \
+        bc file pv
 
     log_info "基础软件包安装完成"
 }
