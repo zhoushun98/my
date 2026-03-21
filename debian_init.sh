@@ -144,15 +144,22 @@ system_update() {
 install_basic_packages() {
     log_info "安装基础软件包..."
 
-    apt install -y \
-        sudo vim curl wget git htop net-tools bind9-dnsutils lsof \
-        zip unzip xz-utils tar rsync screen ca-certificates jq tree \
-        cron bash-completion lsb-release \
-        traceroute mtr-tiny tcpdump netcat-openbsd \
-        iotop sysstat strace procps \
-        parted dosfstools \
-        gnupg apt-transport-https software-properties-common \
-        bc file pv
+    local packages=(
+        sudo vim curl wget git htop net-tools bind9-dnsutils lsof
+        zip unzip xz-utils tar rsync screen ca-certificates jq tree
+        cron bash-completion lsb-release
+        traceroute mtr-tiny tcpdump netcat-openbsd
+        iotop sysstat strace procps
+        parted dosfstools
+        gnupg bc file pv
+    )
+
+    # Debian 12 及以下需要这些包，Debian 13 已移除或内置
+    if [ "$DEBIAN_VER" -lt 13 ]; then
+        packages+=(apt-transport-https software-properties-common)
+    fi
+
+    apt install -y "${packages[@]}"
 
     log_info "基础软件包安装完成"
 }
