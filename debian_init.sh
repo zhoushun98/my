@@ -177,6 +177,11 @@ install_basic_packages() {
         packages+=(apt-transport-https)
     fi
 
+    # btop：Debian 12+ 主源可用；Debian 11 主源无（需 backports），此处跳过
+    if [ "$DEBIAN_VER" -ge 12 ]; then
+        packages+=(btop)
+    fi
+
     apt-get install -y "${packages[@]}"
 
     log_info "基础软件包安装完成"
