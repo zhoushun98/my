@@ -29,13 +29,17 @@ check_root() {
     fi
 }
 
-# 自动检测 Debian 版本
+# 自动检测 Debian 版本（读 /etc/os-release，不依赖 lsb-release）
 detect_version() {
-    if ! command -v lsb_release &>/dev/null; then
-        apt-get install -y lsb-release &>/dev/null
+    if [ ! -f /etc/os-release ]; then
+        log_error "找不到 /etc/os-release，无法识别系统"
+        exit 1
     fi
 
-    CODENAME=$(lsb_release -cs)
+    # shellcheck disable=SC1091
+    . /etc/os-release
+
+    CODENAME=${VERSION_CODENAME:-}
     case "$CODENAME" in
         bullseye) DEBIAN_VER=11 ;;
         bookworm) DEBIAN_VER=12 ;;
@@ -52,12 +56,17 @@ detect_version() {
 # 备份重要配置文件
 backup_configs() {
     log_info "备份重要配置文件..."
-    local backup_dir="/root/config_backup_$(date +%Y%m%d_%H%M%S)"
+    local backup_dir
+    backup_dir="/root/config_backup_$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$backup_dir"
 
-    [ -f /etc/ssh/sshd_config ]        && cp /etc/ssh/sshd_config "$backup_dir/"
-    [ -f /etc/sysctl.conf ]            && cp /etc/sysctl.conf "$backup_dir/"
-    [ -f /etc/security/limits.conf ]   && cp /etc/security/limits.conf "$backup_dir/"
+    [ -f /etc/ssh/sshd_config ]      && cp /etc/ssh/sshd_config "$backup_dir/"
+    [ -d /etc/ssh/sshd_config.d ]    && cp -r /etc/ssh/sshd_config.d "$backup_dir/"
+    [ -f /etc/sysctl.conf ]          && cp /etc/sysctl.conf "$backup_dir/"
+    [ -f /etc/security/limits.conf ] && cp /etc/security/limits.conf "$backup_dir/"
+    [ -f /etc/systemd/system.conf ]  && cp /etc/systemd/system.conf "$backup_dir/"
+    [ -f /etc/apt/sources.list ]     && cp /etc/apt/sources.list "$backup_dir/"
+    [ -d /etc/apt/sources.list.d ]   && cp -r /etc/apt/sources.list.d "$backup_dir/"
 
     log_info "配置文件已备份到: $backup_dir"
 }
@@ -82,32 +91,42 @@ update_sources() {
     echo "12) xTom(澳洲)"
     echo "13) xTom(新加坡)"
     echo "------------------------------------------------"
-    read -p "请输入选项 [1-13] (默认为 1): " choice || true
+    read -r -p "请输入选项 [1-13] (默认为 1): " choice || true
 
-    local main_url="http://deb.debian.org/debian"
-    local security_url="http://security.debian.org/debian-security"
+    # 支持 HTTPS 的镜像用 HTTPS；云内网源保持 HTTP（内网源多数不支持 HTTPS）
+    local main_url="https://deb.debian.org/debian"
+    local security_url="https://security.debian.org/debian-security"
     local source_name="官方源"
 
     case "$choice" in
-        2)  main_url="http://mirrors.sustech.edu.cn/debian";       security_url="http://mirrors.sustech.edu.cn/debian-security";   source_name="南方科大" ;;
-        3)  main_url="http://mirrors.cloud.aliyuncs.com/debian";   security_url="http://mirrors.cloud.aliyuncs.com/debian-security"; source_name="阿里云(内网)" ;;
-        4)  main_url="http://mirrors.tencentyun.com/debian";       security_url="http://mirrors.tencentyun.com/debian-security";   source_name="腾讯云(内网)" ;;
-        5)  main_url="http://mirrors.ivolces.com/debian";          security_url="http://mirrors.ivolces.com/debian-security";      source_name="火山云(内网)" ;;
-        6)  main_url="http://mirrors.xtom.hk/debian";              security_url="http://mirrors.xtom.hk/debian-security";         source_name="xTom(香港)" ;;
-        7)  main_url="http://mirrors.xtom.us/debian";              security_url="http://mirrors.xtom.us/debian-security";         source_name="xTom(美国)" ;;
-        8)  main_url="http://mirrors.xtom.nl/debian";              security_url="http://mirrors.xtom.nl/debian-security";         source_name="xTom(荷兰)" ;;
-        9)  main_url="http://mirrors.xtom.de/debian";              security_url="http://mirrors.xtom.de/debian-security";         source_name="xTom(德国)" ;;
-        10) main_url="http://mirrors.xtom.ee/debian";              security_url="http://mirrors.xtom.ee/debian-security";         source_name="xTom(爱沙尼亚)" ;;
-        11) main_url="http://mirrors.xtom.jp/debian";              security_url="http://mirrors.xtom.jp/debian-security";         source_name="xTom(日本)" ;;
-        12) main_url="http://mirrors.xtom.au/debian";              security_url="http://mirrors.xtom.au/debian-security";         source_name="xTom(澳洲)" ;;
-        13) main_url="http://mirrors.xtom.sg/debian";              security_url="http://mirrors.xtom.sg/debian-security";         source_name="xTom(新加坡)" ;;
+        2)  main_url="https://mirrors.sustech.edu.cn/debian";    security_url="https://mirrors.sustech.edu.cn/debian-security";  source_name="南方科大" ;;
+        3)  main_url="http://mirrors.cloud.aliyuncs.com/debian"; security_url="http://mirrors.cloud.aliyuncs.com/debian-security"; source_name="阿里云(内网)" ;;
+        4)  main_url="http://mirrors.tencentyun.com/debian";     security_url="http://mirrors.tencentyun.com/debian-security";   source_name="腾讯云(内网)" ;;
+        5)  main_url="http://mirrors.ivolces.com/debian";        security_url="http://mirrors.ivolces.com/debian-security";      source_name="火山云(内网)" ;;
+        6)  main_url="https://mirrors.xtom.hk/debian";           security_url="https://mirrors.xtom.hk/debian-security";         source_name="xTom(香港)" ;;
+        7)  main_url="https://mirrors.xtom.us/debian";           security_url="https://mirrors.xtom.us/debian-security";         source_name="xTom(美国)" ;;
+        8)  main_url="https://mirrors.xtom.nl/debian";           security_url="https://mirrors.xtom.nl/debian-security";         source_name="xTom(荷兰)" ;;
+        9)  main_url="https://mirrors.xtom.de/debian";           security_url="https://mirrors.xtom.de/debian-security";         source_name="xTom(德国)" ;;
+        10) main_url="https://mirrors.xtom.ee/debian";           security_url="https://mirrors.xtom.ee/debian-security";         source_name="xTom(爱沙尼亚)" ;;
+        11) main_url="https://mirrors.xtom.jp/debian";           security_url="https://mirrors.xtom.jp/debian-security";         source_name="xTom(日本)" ;;
+        12) main_url="https://mirrors.xtom.au/debian";           security_url="https://mirrors.xtom.au/debian-security";         source_name="xTom(澳洲)" ;;
+        13) main_url="https://mirrors.xtom.sg/debian";           security_url="https://mirrors.xtom.sg/debian-security";         source_name="xTom(新加坡)" ;;
     esac
 
     log_info "已选择: $source_name，正在配置..."
 
-    if [ ! -f /etc/apt/sources.list.bak ]; then
+    if [ ! -f /etc/apt/sources.list.bak ] && [ -f /etc/apt/sources.list ]; then
         cp /etc/apt/sources.list /etc/apt/sources.list.bak
         log_info "已备份原始源到 /etc/apt/sources.list.bak"
+    fi
+
+    # Debian 12/13 默认把源写在 sources.list.d/debian.sources（DEB822 格式），
+    # 我们要覆盖 sources.list，就得把它禁用，否则会同时生效导致双源
+    if [ -f /etc/apt/sources.list.d/debian.sources ] && \
+       [ ! -f /etc/apt/sources.list.d/debian.sources.disabled ]; then
+        mv /etc/apt/sources.list.d/debian.sources \
+           /etc/apt/sources.list.d/debian.sources.disabled
+        log_info "已禁用默认的 debian.sources（防止双源）"
     fi
 
     if [ "$CODENAME" = "bullseye" ]; then
@@ -130,14 +149,13 @@ EOF
     log_info "软件源已更新为: $source_name"
 }
 
-# 系统更新
+# 系统更新（用 apt-get；apt 官方不推荐用于脚本）
 system_update() {
     log_info "更新系统软件包..."
-    apt update
-    apt upgrade -y
-    apt dist-upgrade -y
-    apt autoremove -y
-    apt autoclean
+    apt-get update
+    apt-get -y dist-upgrade
+    apt-get -y autoremove
+    apt-get autoclean
 }
 
 # 安装基础软件
@@ -147,44 +165,75 @@ install_basic_packages() {
     local packages=(
         sudo vim curl wget git htop net-tools bind9-dnsutils lsof
         zip unzip xz-utils tar rsync screen ca-certificates jq tree
-        cron bash-completion lsb-release
+        cron bash-completion
         traceroute mtr-tiny tcpdump netcat-openbsd
         iotop sysstat strace procps
         parted dosfstools
-        gnupg bc file pv
+        gnupg bc file pv less
     )
 
-    # Debian 12 及以下需要这些包，Debian 13 已移除或内置
-    if [ "$DEBIAN_VER" -lt 13 ]; then
-        packages+=(apt-transport-https software-properties-common)
+    # apt-transport-https：Debian 11 需要；12 是空过渡包；13 已删除
+    if [ "$DEBIAN_VER" -lt 12 ]; then
+        packages+=(apt-transport-https)
     fi
 
-    apt install -y "${packages[@]}"
+    apt-get install -y "${packages[@]}"
 
     log_info "基础软件包安装完成"
 }
 
-# SSH安全加固
+# SSH安全加固（使用 sshd_config.d/ drop-in，改完 sshd -t 验证再重启）
 secure_ssh() {
     log_info "配置SSH安全..."
 
+    local drop_in=/etc/ssh/sshd_config.d/99-hardening.conf
+    local key_login="no"
+
     read -p "是否配置密钥登陆? (⚠️ 请确保已上传公钥，否则将无法登录) (y/N): " -r -n 1 || true
     echo
-    if [[ "$REPLY" =~ ^[Yy]$ ]]; then
-        sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-    else
-        sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    [[ "$REPLY" =~ ^[Yy]$ ]] && key_login="yes"
+
+    # 确保主配置文件加载了 sshd_config.d/ 下的 drop-in
+    # Debian 12/13 默认已有 Include；Debian 11 需要手动加
+    if ! grep -qE '^Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config; then
+        sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+        log_info "已在 sshd_config 首行添加 Include /etc/ssh/sshd_config.d/*.conf"
     fi
-    sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/'       /etc/ssh/sshd_config
-    sed -i 's/^#\?PermitEmptyPasswords.*/PermitEmptyPasswords no/'        /etc/ssh/sshd_config
-    sed -i 's/^#\?MaxAuthTries.*/MaxAuthTries 3/'                         /etc/ssh/sshd_config
-    sed -i 's/^#\?ClientAliveInterval.*/ClientAliveInterval 300/'         /etc/ssh/sshd_config
-    sed -i 's/^#\?ClientAliveCountMax.*/ClientAliveCountMax 2/'           /etc/ssh/sshd_config
+
+    mkdir -p /etc/ssh/sshd_config.d
+
+    if [ "$key_login" = "yes" ]; then
+        cat > "$drop_in" <<'EOF'
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+EOF
+    else
+        cat > "$drop_in" <<'EOF'
+PermitRootLogin yes
+PasswordAuthentication yes
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+EOF
+    fi
+    chmod 600 "$drop_in"
+
+    # 关键：验证配置合法性，避免重启后 sshd 起不来把自己踢下线
+    if ! sshd -t; then
+        log_error "sshd 配置校验失败，回滚 $drop_in 并中止"
+        rm -f "$drop_in"
+        return 1
+    fi
 
     systemctl restart ssh
-    log_info "SSH安全配置完成"
+    log_info "SSH 安全配置完成（写入 $drop_in）"
 }
 
 # 系统内核参数优化
@@ -220,12 +269,20 @@ vm.swappiness = 10
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
 
-# 安全相关
+# 安全相关（IPv4）
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.conf.all.accept_source_route = 0
 net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+
+# 安全相关（IPv6）
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv6.conf.default.accept_source_route = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
 EOF
 
     sysctl -p /etc/sysctl.d/99-custom.conf
@@ -236,6 +293,7 @@ EOF
 optimize_limits() {
     log_info "优化系统资源限制..."
 
+    # 1) PAM 层：/etc/security/limits.conf，作用于通过 PAM 登录的会话
     # 幂等性检查，避免重复追加
     if ! grep -q "系统初始化脚本添加" /etc/security/limits.conf; then
         cat >> /etc/security/limits.conf <<EOF
@@ -250,11 +308,17 @@ root hard nofile 1024000
 EOF
     fi
 
-    sed -i 's/^#\? *DefaultLimitNOFILE=.*/DefaultLimitNOFILE=1024000/' /etc/systemd/system.conf
-    sed -i 's/^#\? *DefaultLimitNPROC=.*/DefaultLimitNPROC=65535/'     /etc/systemd/system.conf
-    systemctl daemon-reexec
+    # 2) systemd 层：drop-in 而不是改主配置，作用于 systemd 启动的服务
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/99-limits.conf <<EOF
+[Manager]
+DefaultLimitNOFILE=1024000
+DefaultLimitNPROC=65535
+EOF
 
-    log_info "资源限制优化完成"
+    systemctl daemon-reload
+
+    log_info "资源限制优化完成（已运行的服务需重启才能应用新限制）"
 }
 
 # 配置时区和时间同步
@@ -262,58 +326,57 @@ configure_time() {
     log_info "配置时区和时间同步..."
 
     timedatectl set-timezone Asia/Shanghai
-    apt install -y systemd-timesyncd
+    apt-get install -y systemd-timesyncd
     systemctl enable systemd-timesyncd
     systemctl start systemd-timesyncd
 
     log_info "时区设置为 Asia/Shanghai，时间同步已启用"
 }
 
-# 配置bash
+# 配置bash（放到 /etc/profile.d/，对所有交互式 bash 生效；不再覆盖 root 的 .bashrc）
 configure_bash() {
     log_info "配置bash..."
 
-    cat > ~/.bashrc <<'EOF'
-eval "$(dircolors)"
-alias ls='ls --color=auto'
-alias ll='ls --color=auto -l'
-alias l='ls --color=auto -lA'
+    cat > /etc/profile.d/custom_bash.sh <<'EOF'
+# ===== 系统初始化脚本添加 =====
+if [ -n "$BASH_VERSION" ] && [ -n "$PS1" ]; then
+    eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    alias ll='ls --color=auto -l'
+    alias l='ls --color=auto -lA'
 
-alias rm='rm -i'
-alias cp='cp -i'
-alias mv='mv -i'
+    alias rm='rm -i'
+    alias cp='cp -i'
+    alias mv='mv -i'
 
-export PS1='\n\[\e[1;33m\]\u@\H\[\e[1;35m\]<\D{%F %T}> \[\e[1;32m\]\w\[\e[0m\]\n\$ '
+    export PS1='\n\[\e[1;33m\]\u@\H\[\e[1;35m\]<\D{%F %T}> \[\e[1;32m\]\w\[\e[0m\]\n\$ '
+fi
 EOF
+    chmod 644 /etc/profile.d/custom_bash.sh
 
-    # 动态查找 vim defaults.vim，避免硬编码版本号
+    # 动态查找 vim defaults.vim，避免硬编码版本号；可能匹配多个，逐一处理
     local vim_defaults
-    vim_defaults=$(find /usr/share/vim/vim*/defaults.vim 2>/dev/null | head -1)
-    if [ -n "$vim_defaults" ]; then
-        sed -i 's|set mouse=.*|set mouse=""|g' "$vim_defaults"
-    fi
+    while IFS= read -r vim_defaults; do
+        [ -n "$vim_defaults" ] && sed -i 's|set mouse=.*|set mouse=""|g' "$vim_defaults"
+    done < <(find /usr/share/vim/vim*/defaults.vim 2>/dev/null || true)
 
-    > /etc/motd
+    : > /etc/motd
     rm -rf /etc/update-motd.d/*
 
     log_info "配置bash完成"
 }
 
-# 设置历史命令格式
+# 设置历史命令格式（放到 /etc/profile.d/，避免污染 /etc/profile）
 configure_history() {
     log_info "配置历史命令格式..."
 
-    # 幂等性检查，避免重复追加
-    if ! grep -q "历史命令优化" /etc/profile; then
-        cat >> /etc/profile <<EOF
-
-# ===== 历史命令优化 =====
+    cat > /etc/profile.d/history.sh <<'EOF'
 export HISTSIZE=10000
 export HISTFILESIZE=10000
 export HISTTIMEFORMAT="%F %T "
 export HISTCONTROL=ignoredups
 EOF
-    fi
+    chmod 644 /etc/profile.d/history.sh
 
     log_info "历史命令格式配置完成"
 }
@@ -321,13 +384,14 @@ EOF
 # 系统信息显示
 show_system_info() {
     log_info "========== 系统信息 =========="
-    echo "主机名: $(hostname)"
-    echo "操作系统: $(lsb_release -d | cut -f2)"
+    echo "主机名: $(hostnamectl --static 2>/dev/null || hostname)"
+    # shellcheck disable=SC1091
+    echo "操作系统: $(. /etc/os-release && echo "$PRETTY_NAME")"
     echo "内核版本: $(uname -r)"
-    echo "CPU信息: $(lscpu | grep 'Model name' | cut -d: -f2 | xargs)"
-    echo "内存信息: $(free -h | grep Mem | awk '{print $2}')"
-    echo "磁盘信息: $(df -h / | tail -1 | awk '{print $2}')"
-    echo "IP地址: $(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1 | head -1)"
+    echo "CPU信息: $(lscpu | awk -F: '/Model name/ {sub(/^ +/,"",$2); print $2; exit}')"
+    echo "内存信息: $(free -h | awk '/^Mem:/ {print $2}')"
+    echo "磁盘信息: $(df -h / | awk 'NR==2 {print $2}')"
+    echo "IP地址: $(ip addr show | awk '/inet / && !/127\.0\.0\.1/ {print $2; exit}' | cut -d/ -f1)"
 }
 
 # 主函数
