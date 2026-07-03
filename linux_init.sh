@@ -1,15 +1,18 @@
 #!/bin/bash
 
 #############################################
-# Debian 系统初始化脚本 (支持 11/12/13)
+# Linux 系统初始化脚本
+# 支持: Debian 11/12/13, Ubuntu 22.04/24.04/26.04
 # 用途: 系统初始配置、软件安装、性能优化
 # 作者: Claude
-# 日期: 2026-03-21
+# 日期: 2026-07-03
 #############################################
 
 set -e -o pipefail
 
 export DEBIAN_FRONTEND=noninteractive
+# Ubuntu 22.04+ 默认装有 needrestart，升级时会弹服务重启确认框；a = 自动重启
+export NEEDRESTART_MODE=a
 
 # 颜色定义
 RED='\033[0;31m'
@@ -29,7 +32,7 @@ check_root() {
     fi
 }
 
-# 自动检测 Debian 版本（读 /etc/os-release，不依赖 lsb-release）
+# 自动检测发行版与版本（读 /etc/os-release，不依赖 lsb-release）
 detect_version() {
     if [ ! -f /etc/os-release ]; then
         log_error "找不到 /etc/os-release，无法识别系统"
@@ -39,18 +42,29 @@ detect_version() {
     # shellcheck disable=SC1091
     . /etc/os-release
 
+    DISTRO=${ID:-}
     CODENAME=${VERSION_CODENAME:-}
-    case "$CODENAME" in
-        bullseye) DEBIAN_VER=11 ;;
-        bookworm) DEBIAN_VER=12 ;;
-        trixie)   DEBIAN_VER=13 ;;
+
+    case "${DISTRO}-${CODENAME}" in
+        debian-bullseye) OS_VER=11 ;;
+        debian-bookworm) OS_VER=12 ;;
+        debian-trixie)   OS_VER=13 ;;
+        ubuntu-jammy)    OS_VER=22.04 ;;
+        ubuntu-noble)    OS_VER=24.04 ;;
+        ubuntu-resolute) OS_VER=26.04 ;;
         *)
-            log_error "不支持的 Debian 版本: $CODENAME"
+            log_error "不支持的系统: ${PRETTY_NAME:-$DISTRO $CODENAME}"
             exit 1
             ;;
     esac
 
-    log_info "检测到 Debian $DEBIAN_VER ($CODENAME)"
+    # 源格式: Debian 12+ / Ubuntu 24.04+ 官方默认 DEB822；旧版本沿用 one-line
+    case "$CODENAME" in
+        bullseye|jammy) SRC_FORMAT=oneline ;;
+        *)              SRC_FORMAT=deb822 ;;
+    esac
+
+    log_info "检测到 $DISTRO $OS_VER ($CODENAME)"
 }
 
 # 备份重要配置文件
@@ -75,8 +89,15 @@ backup_configs() {
 update_sources() {
     log_info "准备更新软件源..."
 
+    # Ubuntu 官方 archive 仅收录 amd64/i386，其他架构在 ports.ubuntu.com，
+    # 且各镜像站的 ports 路径不统一，此处不换源，保留系统原有配置
+    if [ "$DISTRO" = "ubuntu" ] && [ "$(dpkg --print-architecture)" != "amd64" ]; then
+        log_warn "Ubuntu $(dpkg --print-architecture) 架构使用 ports 源，跳过换源"
+        return 0
+    fi
+
     echo "------------------------------------------------"
-    echo "请选择要使用的 Debian 软件源镜像:"
+    echo "请选择要使用的软件源镜像:"
     echo "1) 默认"
     echo "2) 南方科大"
     echo "3) 阿里云(内网)"
@@ -94,24 +115,50 @@ update_sources() {
     read -r -p "请输入选项 [1-13] (默认为 1): " choice || true
 
     # 支持 HTTPS 的镜像用 HTTPS；云内网源保持 HTTP（内网源多数不支持 HTTPS）
-    local main_url="https://deb.debian.org/debian"
-    local security_url="https://security.debian.org/debian-security"
-    local source_name="官方源"
-
+    # base_url 为空表示官方源（Debian/Ubuntu 官方域名结构不同，下面单独处理）
+    local base_url="" source_name="官方源"
     case "$choice" in
-        2)  main_url="https://mirrors.sustech.edu.cn/debian";    security_url="https://mirrors.sustech.edu.cn/debian-security";  source_name="南方科大" ;;
-        3)  main_url="http://mirrors.cloud.aliyuncs.com/debian"; security_url="http://mirrors.cloud.aliyuncs.com/debian-security"; source_name="阿里云(内网)" ;;
-        4)  main_url="http://mirrors.tencentyun.com/debian";     security_url="http://mirrors.tencentyun.com/debian-security";   source_name="腾讯云(内网)" ;;
-        5)  main_url="http://mirrors.ivolces.com/debian";        security_url="http://mirrors.ivolces.com/debian-security";      source_name="火山云(内网)" ;;
-        6)  main_url="https://mirrors.xtom.hk/debian";           security_url="https://mirrors.xtom.hk/debian-security";         source_name="xTom(香港)" ;;
-        7)  main_url="https://mirrors.xtom.us/debian";           security_url="https://mirrors.xtom.us/debian-security";         source_name="xTom(美国)" ;;
-        8)  main_url="https://mirrors.xtom.nl/debian";           security_url="https://mirrors.xtom.nl/debian-security";         source_name="xTom(荷兰)" ;;
-        9)  main_url="https://mirrors.xtom.de/debian";           security_url="https://mirrors.xtom.de/debian-security";         source_name="xTom(德国)" ;;
-        10) main_url="https://mirrors.xtom.ee/debian";           security_url="https://mirrors.xtom.ee/debian-security";         source_name="xTom(爱沙尼亚)" ;;
-        11) main_url="https://mirrors.xtom.jp/debian";           security_url="https://mirrors.xtom.jp/debian-security";         source_name="xTom(日本)" ;;
-        12) main_url="https://mirrors.xtom.au/debian";           security_url="https://mirrors.xtom.au/debian-security";         source_name="xTom(澳洲)" ;;
-        13) main_url="https://mirrors.xtom.sg/debian";           security_url="https://mirrors.xtom.sg/debian-security";         source_name="xTom(新加坡)" ;;
+        2)  base_url="https://mirrors.sustech.edu.cn";    source_name="南方科大" ;;
+        3)  base_url="http://mirrors.cloud.aliyuncs.com"; source_name="阿里云(内网)" ;;
+        4)  base_url="http://mirrors.tencentyun.com";     source_name="腾讯云(内网)" ;;
+        5)  base_url="http://mirrors.ivolces.com";        source_name="火山云(内网)" ;;
+        6)  base_url="https://mirrors.xtom.hk";           source_name="xTom(香港)" ;;
+        7)  base_url="https://mirrors.xtom.us";           source_name="xTom(美国)" ;;
+        8)  base_url="https://mirrors.xtom.nl";           source_name="xTom(荷兰)" ;;
+        9)  base_url="https://mirrors.xtom.de";           source_name="xTom(德国)" ;;
+        10) base_url="https://mirrors.xtom.ee";           source_name="xTom(爱沙尼亚)" ;;
+        11) base_url="https://mirrors.xtom.jp";           source_name="xTom(日本)" ;;
+        12) base_url="https://mirrors.xtom.au";           source_name="xTom(澳洲)" ;;
+        13) base_url="https://mirrors.xtom.sg";           source_name="xTom(新加坡)" ;;
     esac
+
+    local main_url security_url components keyring sources_file
+    if [ "$DISTRO" = "debian" ]; then
+        if [ -n "$base_url" ]; then
+            main_url="${base_url}/debian"
+            security_url="${base_url}/debian-security"
+        else
+            main_url="https://deb.debian.org/debian"
+            security_url="https://security.debian.org/debian-security"
+        fi
+        components="main contrib non-free"
+        # Debian 12+ 才有 non-free-firmware 组件
+        [ "$CODENAME" != "bullseye" ] && components="main contrib non-free non-free-firmware"
+        keyring=/usr/share/keyrings/debian-archive-keyring.gpg
+        sources_file=/etc/apt/sources.list.d/debian.sources
+    else
+        # Ubuntu 的 security 与主源同仓库（仅 suite 不同），换镜像时两者指向同一地址
+        if [ -n "$base_url" ]; then
+            main_url="${base_url}/ubuntu"
+            security_url="${base_url}/ubuntu"
+        else
+            main_url="https://archive.ubuntu.com/ubuntu"
+            security_url="https://security.ubuntu.com/ubuntu"
+        fi
+        components="main restricted universe multiverse"
+        keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg
+        sources_file=/etc/apt/sources.list.d/ubuntu.sources
+    fi
 
     log_info "已选择: $source_name，正在配置..."
 
@@ -120,44 +167,51 @@ update_sources() {
         log_info "已备份原始源到 /etc/apt/sources.list.bak"
     fi
 
-    if [ "$CODENAME" = "bullseye" ]; then
-        # Debian 11: 惯例仍是 one-line 格式；无 non-free-firmware 组件，无 backports。
-        # 若系统带有 DEB822 的 debian.sources，禁用之防止双源
-        if [ -f /etc/apt/sources.list.d/debian.sources ] && \
-           [ ! -f /etc/apt/sources.list.d/debian.sources.disabled ]; then
-            mv /etc/apt/sources.list.d/debian.sources \
-               /etc/apt/sources.list.d/debian.sources.disabled
-            log_info "已禁用默认的 debian.sources（防止双源）"
+    if [ "$SRC_FORMAT" = "oneline" ]; then
+        # Debian 11 / Ubuntu 22.04: 惯例仍是 one-line sources.list。
+        # 若系统带有 DEB822 源文件，禁用之防止双源
+        if [ -f "$sources_file" ] && [ ! -f "${sources_file}.disabled" ]; then
+            mv "$sources_file" "${sources_file}.disabled"
+            log_info "已禁用 $(basename "$sources_file")（防止双源）"
         fi
 
-        cat > /etc/apt/sources.list <<EOF
-deb ${main_url}/ ${CODENAME} main contrib non-free
-deb ${main_url}/ ${CODENAME}-updates main contrib non-free
-deb ${security_url} ${CODENAME}-security main contrib non-free
+        if [ "$DISTRO" = "debian" ]; then
+            # Debian 11: 无 backports
+            cat > /etc/apt/sources.list <<EOF
+deb ${main_url}/ ${CODENAME} ${components}
+deb ${main_url}/ ${CODENAME}-updates ${components}
+deb ${security_url} ${CODENAME}-security ${components}
 EOF
+        else
+            cat > /etc/apt/sources.list <<EOF
+deb ${main_url} ${CODENAME} ${components}
+deb ${main_url} ${CODENAME}-updates ${components}
+deb ${main_url} ${CODENAME}-backports ${components}
+deb ${security_url} ${CODENAME}-security ${components}
+EOF
+        fi
     else
-        # Debian 12+: 官方默认为 DEB822 格式，直接覆盖 debian.sources；
-        # 含 non-free-firmware 和 backports
-        cat > /etc/apt/sources.list.d/debian.sources <<EOF
+        # Debian 12+ / Ubuntu 24.04+: 官方默认为 DEB822 格式，直接覆盖系统源文件
+        cat > "$sources_file" <<EOF
 Types: deb
 URIs: ${main_url}
 Suites: ${CODENAME} ${CODENAME}-updates ${CODENAME}-backports
-Components: main contrib non-free non-free-firmware
-Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+Components: ${components}
+Signed-By: ${keyring}
 
 Types: deb
 URIs: ${security_url}
 Suites: ${CODENAME}-security
-Components: main contrib non-free non-free-firmware
-Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+Components: ${components}
+Signed-By: ${keyring}
 EOF
 
-        # 防双源（与 Debian 11 相反）：源统一写在 debian.sources，
+        # 防双源（与 one-line 分支相反）: 源统一写在 DEB822 文件，
         # 把 sources.list 替换为纯注释（原内容已备份到 sources.list.bak）
         if [ -f /etc/apt/sources.list ]; then
             cat > /etc/apt/sources.list <<EOF
-# 软件源已迁移至 DEB822 格式：/etc/apt/sources.list.d/debian.sources
-# 原内容备份：/etc/apt/sources.list.bak
+# 软件源已迁移至 DEB822 格式: ${sources_file}
+# 原内容备份: /etc/apt/sources.list.bak
 EOF
         fi
     fi
@@ -188,13 +242,13 @@ install_basic_packages() {
         gnupg bc file pv less
     )
 
-    # apt-transport-https：Debian 11 需要；12 是空过渡包；13 已删除
-    if [ "$DEBIAN_VER" -lt 12 ]; then
+    # apt-transport-https: 仅 Debian 11 需要；更新的版本为空过渡包或已移除
+    if [ "$CODENAME" = "bullseye" ]; then
         packages+=(apt-transport-https)
     fi
 
-    # btop：Debian 12+ 主源可用；Debian 11 主源无（需 backports），此处跳过
-    if [ "$DEBIAN_VER" -ge 12 ]; then
+    # btop: Debian 11 主源无（需 backports）；Debian 12+ 与 Ubuntu 全系可用
+    if [ "$CODENAME" != "bullseye" ]; then
         packages+=(btop)
     fi
 
@@ -207,7 +261,10 @@ install_basic_packages() {
 secure_ssh() {
     log_info "配置SSH安全..."
 
-    local drop_in=/etc/ssh/sshd_config.d/99-hardening.conf
+    # sshd 配置遵循「先读到的值生效」，Ubuntu 云镜像自带
+    # 50-cloud-init.conf（PasswordAuthentication yes），必须用更小的
+    # 数字前缀让本文件排在它前面，否则加固项会被压住
+    local drop_in=/etc/ssh/sshd_config.d/00-hardening.conf
     local key_login="no"
 
     read -p "是否配置密钥登陆? (⚠️ 请确保已上传公钥，否则将无法登录) (y/N): " -r -n 1 || true
@@ -215,13 +272,15 @@ secure_ssh() {
     [[ "$REPLY" =~ ^[Yy]$ ]] && key_login="yes"
 
     # 确保主配置文件加载了 sshd_config.d/ 下的 drop-in
-    # Debian 12/13 默认已有 Include；Debian 11 需要手动加
+    # Debian 12/13、Ubuntu 22.04+ 默认已有 Include；Debian 11 需要手动加
     if ! grep -qE '^Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config; then
         sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
         log_info "已在 sshd_config 首行添加 Include /etc/ssh/sshd_config.d/*.conf"
     fi
 
     mkdir -p /etc/ssh/sshd_config.d
+    # 清理旧版脚本写入的 99-hardening.conf（排序靠后，会被 50-cloud-init 压住）
+    rm -f /etc/ssh/sshd_config.d/99-hardening.conf
 
     if [ "$key_login" = "yes" ]; then
         cat > "$drop_in" <<'EOF'
@@ -246,7 +305,7 @@ EOF
     fi
     chmod 600 "$drop_in"
 
-    # 关键：验证配置合法性，避免重启后 sshd 起不来把自己踢下线
+    # 关键: 验证配置合法性，避免重启后 sshd 起不来把自己踢下线
     if ! sshd -t; then
         log_error "sshd 配置校验失败，回滚 $drop_in 并中止"
         rm -f "$drop_in"
@@ -314,7 +373,7 @@ EOF
 optimize_limits() {
     log_info "优化系统资源限制..."
 
-    # 1) PAM 层：/etc/security/limits.conf，作用于通过 PAM 登录的会话
+    # 1) PAM 层: /etc/security/limits.conf，作用于通过 PAM 登录的会话
     # 幂等性检查，避免重复追加
     if ! grep -q "系统初始化脚本添加" /etc/security/limits.conf; then
         cat >> /etc/security/limits.conf <<EOF
@@ -329,7 +388,7 @@ root hard nofile 1024000
 EOF
     fi
 
-    # 2) systemd 层：drop-in 而不是改主配置，作用于 systemd 启动的服务
+    # 2) systemd 层: drop-in 而不是改主配置，作用于 systemd 启动的服务
     mkdir -p /etc/systemd/system.conf.d
     cat > /etc/systemd/system.conf.d/99-limits.conf <<EOF
 [Manager]
@@ -354,7 +413,7 @@ configure_time() {
     log_info "时区设置为 Asia/Shanghai，时间同步已启用"
 }
 
-# 配置bash（放到 /etc/profile.d/，对所有交互式 bash 生效；不再覆盖 root 的 .bashrc）
+# 配置bash（放到 /etc/profile.d/，对所有交互式 bash 生效；不覆盖 root 的 .bashrc）
 configure_bash() {
     log_info "配置bash..."
 
@@ -383,6 +442,11 @@ EOF
 
     : > /etc/motd
     rm -rf /etc/update-motd.d/*
+
+    # Ubuntu: 关闭 apt 输出中的 Ubuntu Pro 推广消息
+    if [ "$DISTRO" = "ubuntu" ] && command -v pro >/dev/null 2>&1; then
+        pro config set apt_news=false >/dev/null 2>&1 || true
+    fi
 
     log_info "配置bash完成"
 }
@@ -419,7 +483,7 @@ show_system_info() {
 main() {
     check_root
     detect_version
-    log_info "开始执行 Debian $DEBIAN_VER 初始化脚本..."
+    log_info "开始执行 $DISTRO $OS_VER 初始化脚本..."
 
     backup_configs
     update_sources
